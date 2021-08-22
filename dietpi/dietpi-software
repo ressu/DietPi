@@ -1017,6 +1017,10 @@ INDEX_BROWSER_TARGET=$INDEX_BROWSER_TARGET"
 		aSOFTWARE_DOCS[$software_id]='https://dietpi.com/docs/software/gaming/#papermc'
 		aSOFTWARE_DEPS[$software_id]='196'
 		aSOFTWARE_INTERACTIVE[$software_id]=1
+		# As of Java 16+ need, currently only works on Bullseye and not on ARMv6
+		aSOFTWARE_AVAIL_G_HW_ARCH[$software_id,1]=0
+		aSOFTWARE_AVAIL_G_DISTRO[$software_id,4]=0
+		aSOFTWARE_AVAIL_G_DISTRO[$software_id,5]=0
 
 		#------------------
 		software_id=62
@@ -4330,7 +4334,7 @@ _EOF_
 
 			elif (( $G_DISTRO == 6 )); then
 
-				local apackages=('libcec6' 'libnfs13')
+				local apackages=() # Fixed package dependencies
 
 			fi
 
@@ -4396,6 +4400,12 @@ amvdec_vp9' > /etc/modules-load.d/dietpi-c4-kodi.conf
 					apackages+=('kodi-odroid')
 
 				fi
+
+			# RPi Raspbian Bullseye
+			elif (( $G_HW_MODEL < 10 && $G_DISTRO == 6 )) && (( $G_RASPBIAN ))
+			then
+				/boot/dietpi/func/dietpi-set_hardware rpi-opengl vc4-fkms-v3d
+				Download_Install "https://dietpi.com/downloads/binaries/$G_DISTRO_NAME/kodi_$G_HW_ARCH_NAME.deb"
 
 			# Everything else
 			else
@@ -7876,7 +7886,7 @@ _EOF_
 			Banner_Installing
 
 			# Make sure user agrees to the EULA
-			if [[ -f '/mnt/dietpi_userdata/papermc/eula.txt' ]] || G_WHIP_BUTTON_OK_TEXT='Yes' G_WHIP_BUTTON_OK_TEXT='Abort' G_WHIP_YESNO 'Do you agree to the Minecraft EULA found at:\n\nhttps://account.mojang.com/documents/minecraft_eula'
+			if [[ -f '/mnt/dietpi_userdata/papermc/eula.txt' ]] || G_WHIP_BUTTON_OK_TEXT='Yes' G_WHIP_BUTTON_CANCEL_TEXT='Abort' G_WHIP_YESNO 'Do you agree to the Minecraft EULA found at:\n\nhttps://account.mojang.com/documents/minecraft_eula'
 			then
 				# Collect latest version of PaperMC
 				local url='https://papermc.io/api/v2/projects/paper'
@@ -7887,10 +7897,6 @@ _EOF_
 				Download_Install "$url/versions/$version/builds/$build/downloads/paper-$version-$build.jar" /opt/papermc/paperclip.jar
 				G_EXEC mkdir -p /mnt/dietpi_userdata/papermc
 				G_EXEC eval 'echo "eula=true" > /mnt/dietpi_userdata/papermc/eula.txt'
-			else
-				aSOFTWARE_INSTALL_STATE[$software_id]=0
-				G_DIETPI-NOTIFY 2 "${aSOFTWARE_NAME[$software_id]} install aborted due to outstanding EULA agreement"
-			fi
 
 			# User
 			Create_User -d /mnt/dietpi_userdata/papermc papermc
@@ -7958,6 +7964,12 @@ _EOF_
 			fi
 			G_CONFIG_INJECT 'enable-rcon=' 'enable-rcon=true' /mnt/dietpi_userdata/papermc/server.properties
 			GCI_PASSWORD=1 G_CONFIG_INJECT 'rcon.password=' "rcon.password=$GLOBAL_PW" /mnt/dietpi_userdata/papermc/server.properties
+
+			else
+				aSOFTWARE_INSTALL_STATE[$software_id]=0
+				G_DIETPI-NOTIFY 2 "${aSOFTWARE_NAME[$software_id]} install aborted due to outstanding EULA agreement"
+			fi
+
 		fi
 
 		software_id=140 # Domoticz
@@ -9386,7 +9398,10 @@ _EOF_
 			dps_index=$software_id Download_Install 'conf' /etc/proftpd/proftpd.conf
 
 			# Do not allow root access via FTP
-			sed -i 's/^[[:blank:]]*root/#root/' /etc/ftpusers
+			G_EXEC sed -i 's/^[[:blank:]]*root/#root/' /etc/ftpusers
+
+			# Bullseye: Fix ident lookup: https://github.com/MichaIng/DietPi/issues/4666
+			(( $G_DISTRO < 6 )) || G_EXEC sed -i '/IdentLookups/c\<IfModule mod_ident.c>\nIdentLookups off\n</IfModule>' /etc/proftpd/proftpd.conf
 
 		fi
 
